@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\SitesController;
 use App\Http\Controllers\GoogleSearchConsoleController;
+use App\Http\Controllers\SitemapController;
 
 require __DIR__ . '/auth.php';
 
@@ -19,6 +20,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::delete('/profile/disconnect-gsc', [ProfileController::class, 'disconnectGsc'])->name('profile.disconnect-gsc');
 });
 
 
@@ -33,3 +35,7 @@ Route::get('/auth/google/callback', [GoogleSearchConsoleController::class, 'call
 Route::get('/auth/google/refresh', [GoogleSearchConsoleController::class, 'refresh'])
     ->middleware('auth')
     ->name('google.refresh');
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/dashboard/sites/{site}/sitemaps', [SitemapController::class, 'index'])->name('sites.sitemaps');
+});

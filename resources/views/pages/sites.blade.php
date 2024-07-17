@@ -48,7 +48,39 @@
                             <tbody class="bg-white divide-y divide-gray-100">
                                 @foreach ($sites as $site)
                                 <tr class="border-t border-gray-200">
-                                    <td class="py-2 px-4">{{ $site->site_url }}</td>
+
+                                    <td class="py-2 px-4">
+                                        {{ $site->site_url }}
+                                        <div class="inline-flex items-center gap-2">
+                                            @php
+                                            $outerClass = 'bg-gray-100 text-gray-800';
+                                            $innerClass = 'bg-gray-500';
+
+                                            if ($site->permissions === 'Full') {
+                                            $outerClass = 'bg-green-100 text-green-800';
+                                            $innerClass = 'bg-green-500';
+                                            } elseif ($site->permissions === 'Unverified') {
+                                            $outerClass = 'bg-red-100 text-red-800';
+                                            $innerClass = 'bg-red-500';
+                                            }
+
+                                            $sitemapCount = $site->sitemaps->count();
+                                            @endphp
+
+                                            <span class="inline-flex items-center {{ $outerClass }} text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">
+                                                <span class="w-2 h-2 mr-1 {{ $innerClass }} rounded-full"></span>
+                                                {{$site->permissions}}
+                                            </span>
+
+                                            <a href="{{ url('/dashboard/sites/'.$site->id.'/sitemaps') }}" class="inline-flex items-center bg-gray-100 text-gray-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full hover:bg-gray-200 transition duration-300 ease-in-out">
+                                                <span class="w-2 h-2 mr-1 bg-gray-700 rounded-full"></span>
+                                                <span>{{ $sitemapCount }} {{ Str::plural('Sitemap', $sitemapCount) }}</span>
+                                            </a>
+                                        </div>
+                                    </td>
+
+
+
                                     <td class="py-2 px-4">
                                         <!-- Toggle switch for enabled status -->
                                         <label class="relative inline-flex items-center cursor-pointer">
@@ -72,6 +104,15 @@
                                 </tr>
                                 @endforeach
                             </tbody>
+                            <!-- Apply rounded corners to the bottom left and bottom right of the table -->
+                            <tfoot>
+                                <tr>
+                                    <td class="py-2 px-4 rounded-bl-lg"></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td class="py-2 px-4 rounded-br-lg"></td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                     @endif

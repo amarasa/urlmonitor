@@ -16,10 +16,15 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): View
     {
+        $user = $request->user();
+        $hasGoogleConnection = !is_null($user->google_token);
+
         return view('profile.edit', [
-            'user' => $request->user(),
+            'user' => $user,
+            'hasGoogleConnection' => $hasGoogleConnection,
         ]);
     }
+
 
     /**
      * Update the user's profile information.
@@ -56,5 +61,19 @@ class ProfileController extends Controller
         $request->session()->regenerateToken();
 
         return Redirect::to('/');
+    }
+
+    public function disconnectGsc(Request $request)
+    {
+        $user = Auth::user();
+
+        // Set google_token to null
+        $user->google_token = null;
+        $user->save();
+
+        // Delete all sites associated with the user
+        $user->sites()->delete(); // Cascades to sitemaps
+
+        return redirect()->route('dashboard.sites')->with('status', 'Google Search Console connection disconnected successfully.');
     }
 }
