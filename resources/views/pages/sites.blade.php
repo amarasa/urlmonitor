@@ -56,7 +56,7 @@
                                             $outerClass = 'bg-gray-100 text-gray-800';
                                             $innerClass = 'bg-gray-500';
 
-                                            if ($site->permissions === 'Full') {
+                                            if ($site->permissions === 'Owner') {
                                             $outerClass = 'bg-green-100 text-green-800';
                                             $innerClass = 'bg-green-500';
                                             } elseif ($site->permissions === 'Unverified') {
