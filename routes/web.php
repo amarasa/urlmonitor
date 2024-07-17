@@ -2,6 +2,10 @@
 
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\SitesController;
+use App\Http\Controllers\GoogleSearchConsoleController;
+
+require __DIR__ . '/auth.php';
 
 Route::get('/', function () {
     return view('welcome');
@@ -17,4 +21,15 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-require __DIR__ . '/auth.php';
+
+Route::get('/dashboard/sites', [GoogleSearchConsoleController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard.sites');
+Route::get('/dashboard/sites/{id}', [SitesController::class, 'show'])->middleware(['auth', 'verified'])->name('dashboard.sites.show');
+
+
+Route::get('/auth/google', [GoogleSearchConsoleController::class, 'connect'])->name('google.connect');
+Route::get('/auth/google/callback', [GoogleSearchConsoleController::class, 'callback'])->name('google.callback');
+Route::get('/auth/google/refresh', [GoogleSearchConsoleController::class, 'refresh'])
+    ->middleware('auth')
+    ->name('google.refresh');

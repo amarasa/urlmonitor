@@ -20,6 +20,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'google_token',
     ];
 
     /**
@@ -43,5 +44,9 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+    public function sites()
+    {
+        return $this->hasMany(Site::class);
     }
 }
