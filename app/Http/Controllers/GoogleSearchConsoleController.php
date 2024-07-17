@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use Google_Client;
 use Google_Service_Webmasters;
 use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class GoogleSearchConsoleController extends Controller
 {
@@ -55,7 +57,6 @@ class GoogleSearchConsoleController extends Controller
 
         return view('pages.sites', ['connected' => true, 'sites' => $storedSites]);
     }
-
     public function refresh()
     {
         $user = Auth::user();
@@ -118,36 +119,148 @@ class GoogleSearchConsoleController extends Controller
             $sitemaps = $service->sitemaps->listSitemaps($site->site_url);
             $existingSitemaps = $site->sitemaps()->pluck('url')->toArray();
             $fetchedSitemaps = array_map(function ($sitemap) {
-                return $sitemap->path;
+                $numberOfUrls = array_reduce($sitemap->contents, function ($carry, $content) {
+                    return $carry + (isset($content->submitted) ? (int) $content->submitted : 0);
+                }, 0);
+
+                return [
+                    'url' => $sitemap->path,
+                    'number_of_urls' => $numberOfUrls,
+                    'is_index' => $sitemap->isSitemapsIndex ?? false,
+                    'enabled' => true, // Assuming all new sitemaps are enabled by default
+                    'errors' => (int) $sitemap->errors,
+                    'is_pending' => (bool) $sitemap->isPending,
+                    'last_downloaded' => $sitemap->lastDownloaded ? \Carbon\Carbon::parse($sitemap->lastDownloaded) : null,
+                    'last_submitted' => $sitemap->lastSubmitted ? \Carbon\Carbon::parse($sitemap->lastSubmitted) : null,
+                    'warnings' => (int) $sitemap->warnings,
+                ];
             }, $sitemaps->getSitemap());
 
-            $sitemapsToAdd = array_diff($fetchedSitemaps, $existingSitemaps);
-            $sitemapsToRemove = array_diff($existingSitemaps, $fetchedSitemaps);
+            $sitemapsToAdd = array_filter($fetchedSitemaps, function ($fetchedSitemap) use ($existingSitemaps) {
+                return !in_array($fetchedSitemap['url'], $existingSitemaps);
+            });
+
+            $sitemapsToRemove = array_diff($existingSitemaps, array_column($fetchedSitemaps, 'url'));
 
             if (!empty($sitemapsToRemove)) {
                 $site->sitemaps()->whereIn('url', $sitemapsToRemove)->delete();
             }
 
-            foreach ($sitemapsToAdd as $sitemapUrl) {
-                $site->sitemaps()->create([
-                    'url' => $sitemapUrl,
-                ]);
+            foreach ($sitemapsToAdd as $sitemapData) {
+                $site->sitemaps()->updateOrCreate(
+                    ['url' => $sitemapData['url']],
+                    [
+                        'number_of_urls' => $sitemapData['number_of_urls'],
+                        'is_index' => $sitemapData['is_index'],
+                        'enabled' => $sitemapData['enabled'],
+                        'errors' => $sitemapData['errors'],
+                        'is_pending' => $sitemapData['is_pending'],
+                        'last_downloaded' => $sitemapData['last_downloaded'],
+                        'last_submitted' => $sitemapData['last_submitted'],
+                        'warnings' => $sitemapData['warnings'],
+                    ]
+                );
             }
         }
 
         return response()->json(['success' => true]);
     }
 
-
-    private function mapPermissions($permission)
+    private function mapPermissions($permissionLevel)
     {
-        $permissionsMap = [
+        $map = [
             'siteOwner' => 'Owner',
             'siteFullUser' => 'Full',
             'siteRestrictedUser' => 'Restricted',
             'siteUnverifiedUser' => 'Unverified',
         ];
 
-        return $permissionsMap[$permission] ?? $permission;
+        return $map[$permissionLevel] ?? 'Unknown';
+    }
+
+
+    public function refreshSitemaps($siteId)
+    {
+        $user = Auth::user();
+        if (!$user->google_token) {
+            //    Log::error('User not connected to Google Search Console', ['user_id' => $user->id]);
+            return response()->json(['success' => false, 'message' => 'Not connected to Google Search Console'], 403);
+        }
+
+        $client = new Google_Client();
+        $client->setClientId(env('GOOGLE_CLIENT_ID'));
+        $client->setClientSecret(env('GOOGLE_CLIENT_SECRET'));
+        $accessToken = json_decode($user->google_token, true);
+        $client->setAccessToken($accessToken);
+
+        if ($client->isAccessTokenExpired()) {
+            if (isset($accessToken['refresh_token'])) {
+                $client->fetchAccessTokenWithRefreshToken($accessToken['refresh_token']);
+                $newToken = $client->getAccessToken();
+                $newToken['refresh_token'] = $accessToken['refresh_token']; // Retain the refresh token
+                $user->google_token = json_encode($newToken);
+                $user->save();
+            } else {
+                //   Log::error('Refresh token is missing', ['user_id' => $user->id]);
+                return response()->json(['success' => false, 'message' => 'Refresh token is missing'], 403);
+            }
+        }
+
+        $service = new Google_Service_Webmasters($client);
+        $site = $user->sites()->findOrFail($siteId);
+
+        try {
+            $sitemaps = $service->sitemaps->listSitemaps($site->site_url);
+        } catch (Exception $e) {
+            //   Log::error('Failed to fetch sitemaps from Google Search Console', ['site_id' => $siteId, 'error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Failed to fetch sitemaps from Google Search Console'], 500);
+        }
+
+        $existingSitemaps = $site->sitemaps()->pluck('url')->toArray();
+        $fetchedSitemaps = array_map(function ($sitemap) {
+            return [
+                'url' => $sitemap->path,
+                'number_of_urls' => collect($sitemap->contents)->sum('submitted'),
+                'is_index' => $sitemap->isSitemapsIndex,
+                'errors' => $sitemap->errors,
+                'is_pending' => $sitemap->isPending,
+                'last_downloaded' => Carbon::parse($sitemap->lastDownloaded)->format('Y-m-d H:i:s'),
+                'last_submitted' => Carbon::parse($sitemap->lastSubmitted)->format('Y-m-d H:i:s'),
+                'warnings' => $sitemap->warnings,
+                'enabled' => true,
+            ];
+        }, $sitemaps->getSitemap());
+
+        // Log::info('Fetched sitemaps from Google Search Console', ['site_id' => $siteId, 'sitemaps' => $fetchedSitemaps]);
+
+        $sitemapsToAdd = array_filter($fetchedSitemaps, function ($fetchedSitemap) use ($existingSitemaps) {
+            return !in_array($fetchedSitemap['url'], $existingSitemaps);
+        });
+
+        $sitemapsToRemove = array_diff($existingSitemaps, array_column($fetchedSitemaps, 'url'));
+
+        // Log::info('Sitemaps to add', ['site_id' => $siteId, 'sitemaps_to_add' => $sitemapsToAdd]);
+        // Log::info('Sitemaps to remove', ['site_id' => $siteId, 'sitemaps_to_remove' => $sitemapsToRemove]);
+
+        if (!empty($sitemapsToRemove)) {
+            $site->sitemaps()->whereIn('url', $sitemapsToRemove)->delete();
+            //   Log::info('Removed sitemaps', ['site_id' => $siteId, 'sitemaps_to_remove' => $sitemapsToRemove]);
+        }
+
+        foreach ($sitemapsToAdd as $sitemapData) {
+            $site->sitemaps()->create($sitemapData);
+            //  Log::info('Added sitemap', ['site_id' => $siteId, 'sitemap' => $sitemapData]);
+        }
+
+        // Update existing sitemaps
+        foreach ($fetchedSitemaps as $fetchedSitemap) {
+            $site->sitemaps()->updateOrCreate(
+                ['url' => $fetchedSitemap['url']],
+                $fetchedSitemap
+            );
+            //  Log::info('Updated sitemap', ['site_id' => $siteId, 'sitemap' => $fetchedSitemap]);
+        }
+
+        return response()->json(['success' => true]);
     }
 }

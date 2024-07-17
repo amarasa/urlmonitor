@@ -141,14 +141,6 @@
                     refreshIcon.classList.remove('spin');
                 });
         }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            tippy('[data-tooltip]', {
-                content: (reference) => reference.getAttribute('data-tooltip'),
-                arrow: true,
-                theme: 'light',
-            });
-        });
     </script>
     <style>
         .spin {

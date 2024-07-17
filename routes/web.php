@@ -39,3 +39,5 @@ Route::get('/auth/google/refresh', [GoogleSearchConsoleController::class, 'refre
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard/sites/{site}/sitemaps', [SitemapController::class, 'index'])->name('sites.sitemaps');
 });
+
+Route::get('/dashboard/sites/{siteId}/refresh-sitemaps', [GoogleSearchConsoleController::class, 'refreshSitemaps'])->middleware('auth')->name('refresh.sitemaps');

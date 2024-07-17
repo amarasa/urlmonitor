@@ -10,8 +10,15 @@ class Sitemap extends Model
     use HasFactory;
 
     protected $fillable = [
-        'site_id',
         'url',
+        'number_of_urls',
+        'is_index',
+        'enabled',
+        'errors',
+        'is_pending',
+        'last_downloaded',
+        'last_submitted',
+        'warnings',
     ];
 
     public function site()
