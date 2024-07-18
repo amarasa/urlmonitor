@@ -18,9 +18,11 @@ class GoogleSearchConsoleController extends Controller
         $client->setClientSecret(env('GOOGLE_CLIENT_SECRET'));
         $client->setRedirectUri(route('google.callback'));
         $client->addScope(Google_Service_Webmasters::WEBMASTERS_READONLY);
+        $client->setAccessType('offline'); // Request refresh token
+        $client->setPrompt('consent'); // Ensure consent is requested every time
 
         $authUrl = $client->createAuthUrl();
-        return redirect($authUrl);
+        return redirect()->away($authUrl);
     }
 
     public function callback(Request $request)
@@ -30,16 +32,24 @@ class GoogleSearchConsoleController extends Controller
         $client->setClientSecret(env('GOOGLE_CLIENT_SECRET'));
         $client->setRedirectUri(route('google.callback'));
 
-        if ($request->has('code')) {
-            $token = $client->fetchAccessTokenWithAuthCode($request->input('code'));
-            $client->setAccessToken($token);
-
-            // Save the token in the user's record
+        $accessToken = $client->fetchAccessTokenWithAuthCode($request->code);
+        if (isset($accessToken['refresh_token'])) {
             $user = Auth::user();
-            $user->google_token = json_encode($token);
+            $user->google_token = json_encode($accessToken);
             $user->save();
+        } else {
+            // Handle the case where no refresh token is provided
+            // This could happen if the user has previously granted offline access
+            // and Google's policy is to only return a refresh token on the first consent
+            $existingToken = json_decode($user->google_token, true);
+            $existingToken['access_token'] = $accessToken['access_token'];
+            $existingToken['expires_in'] = $accessToken['expires_in'];
+            $existingToken['scope'] = $accessToken['scope'];
+            $existingToken['token_type'] = $accessToken['token_type'];
+            $existingToken['created'] = $accessToken['created'];
 
-            return redirect()->route('dashboard.sites');
+            $user->google_token = json_encode($existingToken);
+            $user->save();
         }
 
         return redirect()->route('dashboard.sites')->with('error', 'Failed to connect to Google Search Console');
