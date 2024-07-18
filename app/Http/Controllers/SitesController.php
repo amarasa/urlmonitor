@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\Site;
+use Illuminate\Http\Request;
+use App\Helpers\GoogleSearchConsoleHelper;
+use Illuminate\View\View;
 
 class SitesController extends Controller
 {
@@ -34,13 +36,20 @@ class SitesController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show($id)
+    public function show($id): View
     {
         $site = Site::findOrFail($id);
 
-        // Pass the site to the view
-        return view('sites.show', compact('site'));
+        $totalIndexedPages = GoogleSearchConsoleHelper::getIndexedPages($site->site_url);
+        $inProgress = GoogleSearchConsoleHelper::getInProgressPages($site->site_url);
+        $notIndexed = GoogleSearchConsoleHelper::getNotIndexedPages($site->site_url);
+        $notChecked = GoogleSearchConsoleHelper::getNotCheckedPages($site->site_url);
+
+        return view('sites.show', compact('site', 'totalIndexedPages', 'inProgress', 'notIndexed', 'notChecked'));
     }
+
+
+
 
     /**
      * Show the form for editing the specified resource.
